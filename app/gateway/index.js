@@ -5,73 +5,129 @@ const { v4: uuidv4 } = require('uuid');
 const app = express();
 app.use(express.json());
 
-const PORT = 3000;
+const PORT = process.env.PORT || 4000;
 
-// internal service URL (will match k8s service later)
-const CHECKOUT_URL = process.env.CHECKOUT_URL || "http://localhost:4000";
+// service URLs (will change in Kubernetes)
+const PRICING_URL = process.env.PRICING_URL || 'http://localhost:5001';
+const INVENTORY_URL = process.env.INVENTORY_URL || 'http://localhost:5002';
 
-// middleware to handle request ID
+// request ID middleware
 app.use((req, res, next) => {
   let requestId = req.headers['x-request-id'];
+
   if (!requestId) {
     requestId = uuidv4();
   }
+
   req.requestId = requestId;
   res.setHeader('X-Request-Id', requestId);
+
   next();
 });
 
-// root
-app.get('/', (req, res) => {
-  res.send('Gateway is running');
-});
-
-// ping
-app.get('/api/ping', (req, res) => {
-  const start = Date.now();
+// health endpoint
+app.get('/health', (req, res) => {
   res.json({
-    message: "pong",
-    requestId: req.requestId,
-    latency: Date.now() - start
-  });
-});
-
-// architecture label
-app.get('/api/arch', (req, res) => {
-  res.json({
-    architecture: "k8s-microservices-checkout",
+    service: 'checkout',
+    status: 'ok',
     requestId: req.requestId
   });
 });
 
-// checkout route
-app.post('/api/checkout', async (req, res) => {
-  console.log(`[Gateway] Request ${req.requestId} received`);
+// checkout endpoint
+app.post('/checkout', async (req, res) => {
+  const { sku, qty } = req.body;
+
+  console.log(
+    `[Checkout] requestId=${req.requestId} method=POST path=/checkout sku=${sku} qty=${qty}`
+  );
+
+  // validation
+  if (!sku || !qty || qty <= 0) {
+    return res.status(400).json({
+      requestId: req.requestId,
+      status: 'failed',
+      error: 'Invalid input: sku and qty (>0) are required'
+    });
+  }
 
   try {
-    const response = await axios.post(
-      `${CHECKOUT_URL}/checkout`,
-      req.body,
+    // call pricing service
+    const pricingResponse = await axios.post(
+      `${PRICING_URL}/price`,
+      { sku, qty },
       {
         headers: {
           'X-Request-Id': req.requestId
         },
-        timeout: 2000
+        timeout: 1500
       }
     );
 
-    res.json(response.data);
+    // call inventory service
+    const inventoryResponse = await axios.get(
+      `${INVENTORY_URL}/stock/${sku}`,
+      {
+        headers: {
+          'X-Request-Id': req.requestId
+        },
+        timeout: 1500
+      }
+    );
+
+    const unitPrice = pricingResponse.data.unitPrice;
+    const total = pricingResponse.data.total;
+    const inStock = inventoryResponse.data.inStock;
+
+    // out of stock case
+    if (!inStock) {
+      console.log(
+        `[Checkout] requestId=${req.requestId} result=out-of-stock`
+      );
+
+      return res.status(409).json({
+        requestId: req.requestId,
+        sku,
+        qty,
+        inStock: false,
+        status: 'failed',
+        error: 'Item out of stock'
+      });
+    }
+
+    // success case
+    console.log(
+      `[Checkout] requestId=${req.requestId} result=success total=${total}`
+    );
+
+    return res.json({
+      requestId: req.requestId,
+      sku,
+      qty,
+      unitPrice,
+      total,
+      inStock: true,
+      status: 'confirmed'
+    });
 
   } catch (error) {
-    console.error(`[Gateway] Error ${req.requestId}: ${error.message}`);
+    const isTimeout = error.code === 'ECONNABORTED';
 
-    res.status(500).json({
+    console.error(
+      `[Checkout] requestId=${req.requestId} dependency_error=${error.message}`
+    );
+
+    return res.status(503).json({
       requestId: req.requestId,
-      error: "Checkout service unavailable"
+      status: 'failed',
+      error: isTimeout
+        ? 'Dependency timeout during checkout'
+        : 'Dependency unavailable during checkout'
     });
   }
 });
 
+// start server
 app.listen(PORT, () => {
-  console.log(`Gateway running on port ${PORT}`);
+  console.log(`Checkout service running on port ${PORT}`);
 });
