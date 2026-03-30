@@ -42,7 +42,9 @@ app.get('/api/arch', (req, res) => {
 });
 
 app.post('/api/checkout', async (req, res) => {
-  console.log(`[Gateway] requestId=${req.requestId} method=POST path=/api/checkout`);
+  console.log(
+    `[Gateway] requestId=${req.requestId} method=POST path=/api/checkout`
+  );
 
   try {
     const response = await axios.post(
@@ -58,6 +60,14 @@ app.post('/api/checkout', async (req, res) => {
 
     return res.json(response.data);
   } catch (error) {
+    if (error.response) {
+      console.error(
+        `[Gateway] requestId=${req.requestId} downstream_status=${error.response.status}`
+      );
+
+      return res.status(error.response.status).json(error.response.data);
+    }
+
     console.error(
       `[Gateway] requestId=${req.requestId} dependency_error=${error.message}`
     );
