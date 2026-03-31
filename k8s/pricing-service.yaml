@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pricing
+  namespace: checkout
+spec:
+  selector:
+    app: pricing
+  ports:
+    - port: 5001
+      targetPort: 5001
+  type: ClusterIP
