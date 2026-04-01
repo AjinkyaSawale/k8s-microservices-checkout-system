@@ -1,0 +1,17 @@
+apiVersion: http.keda.sh/v1alpha1
+kind: HTTPScaledObject
+metadata:
+  name: gateway-http
+  namespace: checkout
+spec:
+  scaleTargetRef:
+    name: gateway
+    kind: Deployment
+    service: gateway
+    port: 3000
+  replicas:
+    min: 0
+    max: 5
+  scaledownPeriod: 30
+  hosts:
+    - localhost
