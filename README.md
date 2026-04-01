@@ -1,118 +1,202 @@
 # k8s-microservices-checkout-system
 
-This project is a microservices based checkout system built using Node.js and deployed on Kubernetes (K3d). The goal of this project is to understand how services communicate with each other and how Kubernetes helps in managing deployments, scaling, and reliability.
+This project is a microservices-based checkout system built using Node.js and deployed on Kubernetes (K3s/K3d). The aim of this project is to demonstrate service communication, request tracing, scaling, and troubleshooting in a Kubernetes environment.
+
+---
 
 ## Project Overview
 
-This project simulates a simple e-commerce checkout system. It consists of multiple services like gateway, checkout, pricing, and inventory. Initially the services were tested locally and later deployed on Kubernetes.
+The system simulates a simple e-commerce checkout workflow using multiple services:
 
-## Current Architecture
+- Gateway (entry point)
+- Checkout (business logic)
+- Pricing (price lookup)
+- Inventory (stock validation)
 
-Gateway service acts as the entry point
-Checkout service handles business logic
-Pricing service returns product price
-Inventory service checks stock
-Ingress is used to expose the gateway
-All services communicate internally using ClusterIP
+The application is exposed using Kubernetes Ingress and supports request tracing using X-Request-Id.
 
-Planned features:
-KEDA for scaling
-PostgreSQL for persistence
+---
 
-## Implemented So Far
+## Architecture
 
-Gateway Service
+Request flow:
 
-Handles all incoming requests and routes them to checkout service
-Endpoints available:
-GET /
-GET /api/ping
-GET /api/arch
-POST /api/checkout
+Client → Ingress → Gateway → Checkout → Pricing + Inventory
 
-It also generates and forwards X-Request-Id for tracing
+- Gateway handles all incoming requests
+- Checkout communicates with downstream services
+- Services communicate internally using ClusterIP
+- Ingress exposes the application externally
 
-Checkout Service
+---
 
-Handles checkout requests
-Calls pricing and inventory services
-Includes request ID propagation, timeout handling, and logging
+## Services
 
-Pricing Service
+### Gateway Service
 
-Returns price for a given product
-Has /price and /health endpoints
+- Acts as entry point
+- Routes requests to checkout
+- Generates and forwards X-Request-Id
 
-Inventory Service
+Endpoints:
+- GET /
+- GET /api/ping
+- GET /api/arch
+- POST /api/checkout
 
-Checks if product is in stock
-Has /stock and /health endpoints
+---
+
+### Checkout Service
+
+- Handles checkout logic
+- Calls pricing and inventory services
+- Implements timeout handling and error handling
+- Logs request ID for tracing
+
+---
+
+### Pricing Service
+
+- Returns price for a product
+
+Endpoints:
+- /price
+- /health
+
+---
+
+### Inventory Service
+
+- Checks product availability
+
+Endpoints:
+- /stock
+- /health
+
+---
 
 ## Kubernetes Implementation
 
-All services are deployed on Kubernetes using K3d
+- Deployed using K3d (K3s)
+- Each service has its own Deployment and Service
+- ClusterIP used for internal communication
+- Ingress (Traefik) used to expose gateway
+- Docker images built locally and imported into cluster
 
-Each service has its own deployment and service
-ClusterIP is used for internal communication
-Ingress is configured to expose the gateway
-Docker images are built and used in the cluster
+---
 
-## Request Flow
+## Request Tracing
 
-Client -> Ingress -> Gateway -> Checkout -> Pricing + Inventory
+- Each request includes X-Request-Id header
+- Request ID is propagated across services
+- Logs contain request ID for debugging and tracing
 
-Each request carries a unique request ID which helps in tracking across services
+---
 
-## Kubernetes Evidence
+## Scaling with KEDA
 
-All Resources
-![All Resources](docs/screenshots/k8s-all-resources.png)
+- KEDA is configured for scaling
+- Gateway supports scale to zero
+- Demonstrated:
+  - Scale from zero (cold start)
+  - Warm request performance
 
-Endpoints
-![Endpoints](docs/screenshots/k8s-endpoints.png)
+---
 
-EndpointSlices
-![EndpointSlices](docs/screenshots/k8s-endpointslices.png)
+## Latency Testing
 
-Internal Connectivity
-![Internal Connectivity](docs/screenshots/k8s-internal-connectivity.png)
+Cold start latency:
 
-Gateway Logs
-![Gateway Logs](docs/screenshots/k8s-gateway-logs.png)
+![Cold Latency](docs/screenshots/13_cold_latency.png)
 
-Checkout Logs
-![Checkout Logs](docs/screenshots/k8s-checkout-logs.png)
+Warm request latency:
 
-Events
-![Events](docs/screenshots/k8s-events.png)
+![Warm Latency](docs/screenshots/14_warm_latency.png)
+
+---
+
+## Partial Failure Scenario
+
+- Simulated failure of downstream service
+- Gateway remains available
+- Checkout fails with proper error response
+
+![Partial Failure](docs/screenshots/12_partial_failure.png)
+
+---
+
+## Troubleshooting Evidence
+
+Cluster overview:
+
+![Cluster](docs/screenshots/15_cluster_overview.png)
+
+Endpoints:
+
+![Endpoints](docs/screenshots/16_endpoints.png)
+
+EndpointSlices:
+
+![EndpointSlices](docs/screenshots/17_endpointslices.png)
+
+Service details:
+
+![Service Details](docs/screenshots/18_service_details.png)
+
+Ingress routing:
+
+![Ingress](docs/screenshots/19_ingress_routing.png)
+
+Gateway logs with request tracing:
+
+![Gateway Logs](docs/screenshots/20_gateway_logs_trace.png)
+
+Checkout logs with request tracing:
+
+![Checkout Logs](docs/screenshots/21_checkout_logs_trace.png)
+
+Internal connectivity using toolbox pod:
+
+![Connectivity](docs/screenshots/22_internal_connectivity.png)
+
+---
 
 ## Project Structure
 
 app/
-gateway/
-checkout/
-pricing/
-inventory/
+- gateway/
+- checkout/
+- pricing/
+- inventory/
 
 k8s/
-deployment and service files
+- deployment and service YAML files
 
 docs/
-screenshots
+- screenshots
+
+---
 
 ## Current Status
 
-All services are working
-Kubernetes deployment is completed
-Ingress routing is working
-Internal communication between services is verified
-Screenshots and evidence are added
+- Microservices are implemented and working
+- Kubernetes deployment is complete
+- Ingress routing is working
+- Request tracing is implemented
+- KEDA scaling is working
+- Cold vs warm latency tested
+- Partial failure scenario tested
+- Troubleshooting evidence collected
 
-Pending work:
-KEDA scaling
-PostgreSQL integration
+---
+
+## Pending Work
+
+- PostgreSQL integration (persistence)
+  - Secret for credentials
+  - PVC for storage
+  - Data persistence verification
 
 ## Author
 
 Ajinkya Sawale
-
