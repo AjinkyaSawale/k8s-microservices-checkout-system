@@ -8,8 +8,9 @@ const PORT = process.env.PORT || 5001;
 
 const prices = {
   "laptop-123": 999,
-  "mouse-456": 25,
-  "keyboard-789": 75
+  "mouse-456": 49,
+  "keyboard-789": 79,
+  "out-of-stock": 79
 };
 
 app.use((req, res, next) => {
@@ -33,36 +34,30 @@ app.get('/health', (req, res) => {
 });
 
 app.post('/price', (req, res) => {
-  const { sku, qty } = req.body;
+  const { sku } = req.body;
 
   console.log(
-    `[Pricing] requestId=${req.requestId} method=POST path=/price sku=${sku} qty=${qty}`
+    `[Pricing] requestId=${req.requestId} method=POST path=/price sku=${sku}`
   );
 
-  if (!sku || !qty || qty <= 0) {
+  if (!sku) {
     return res.status(400).json({
       requestId: req.requestId,
-      error: 'Invalid input: sku and qty (>0) are required'
+      error: 'sku is required'
     });
   }
 
-  const unitPrice = prices[sku];
-
-  if (!unitPrice) {
+  if (!(sku in prices)) {
     return res.status(404).json({
       requestId: req.requestId,
       error: 'SKU not found'
     });
   }
 
-  const total = unitPrice * qty;
-
   return res.json({
     requestId: req.requestId,
     sku,
-    qty,
-    unitPrice,
-    total
+    unitPrice: prices[sku]
   });
 });
 

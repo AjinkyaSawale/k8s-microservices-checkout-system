@@ -1,138 +1,158 @@
-# k8s-microservices-checkout-system
+k8s microservices checkout system
 
-A cloud-native microservices-based checkout system built using Node.js and deployed on Kubernetes (K3s). This project demonstrates service communication, request tracing, scaling with KEDA, and handling partial failures in a distributed system.
+A cloud native microservices based checkout system built using Node.js and deployed on Kubernetes (K3s). This project demonstrates service communication, request tracing, scaling using KEDA, failure handling, and basic persistence using PostgreSQL.
 
----
+Overview
 
-## Overview
+This project simulates an e commerce checkout workflow using multiple services:
 
-This project simulates an e-commerce checkout workflow composed of multiple services:
+Gateway (entry point)
+Checkout (business logic)
+Pricing (price lookup)
+Inventory (stock validation)
+PostgreSQL (data persistence)
 
-- Gateway (entry point)
-- Checkout (business logic)
-- Pricing (price lookup)
-- Inventory (stock validation)
+The system is deployed on Kubernetes and exposed using Ingress (Traefik). It is designed to handle failures properly, scale dynamically, and provide clear debugging evidence.
 
-The system is deployed on Kubernetes and exposed via Ingress. It is designed to handle failures gracefully and scale dynamically based on traffic.
-
----
-
-## Architecture
+Architecture
 
 Request flow:
 
 Client → Ingress → Gateway → Checkout → Pricing + Inventory
 
-- Gateway handles all incoming traffic
-- Checkout coordinates downstream services
-- Services communicate internally using ClusterIP
-- Ingress (Traefik) exposes the API externally
+Gateway handles incoming requests
+Checkout coordinates pricing and inventory services
+Services communicate internally using ClusterIP
+Ingress exposes the system externally
+Key Features
+Microservices Architecture
+Separate services for gateway, checkout, pricing, and inventory
+Loose coupling using HTTP communication
+Clear separation of responsibilities
+API Endpoints
 
----
+Gateway exposes:
 
-## Key Features
+GET /
+GET /api/ping
+GET /api/arch
+POST /api/checkout
 
-### Microservices Architecture
+Checkout internally calls:
 
-- Independent services for gateway, checkout, pricing, and inventory
-- Clear separation of responsibilities
-- HTTP-based communication between services
+pricing service
+inventory service
+Request Tracing
+Each request includes X Request Id
+ID is propagated across all services
+Logs include request ID for tracing
 
----
+This helps track a single request across multiple services.
 
-### Request Tracing
-
-- Each request includes an `X-Request-Id`
-- The ID is propagated across all services
-- Logs can be used to trace a request end-to-end
-
----
-
-### Scaling with KEDA
-
-- Configured scale-to-zero for the gateway
-- Automatically scales up when traffic arrives
+Scaling with KEDA
+Gateway configured for scale to zero
+Automatically scales when traffic arrives
+Scales down when idle
 
 Cold start latency:
 
-This request triggered scale-from-zero using KEDA. The latency includes pod startup time.
-
-![Cold Latency](docs/screenshots/13_cold_latency.png)
-
 Warm request latency:
 
-This request was handled by an already running pod, resulting in lower latency.
-
-![Warm Latency](docs/screenshots/14_warm_latency.png)
-
----
-
-### Failure Handling
-
-- Downstream service failures are handled gracefully
-- Checkout fails fast using timeouts
-- Gateway remains available even if dependencies fail
+Failure Handling
+Checkout service uses timeouts for dependencies
+Failures return clear error messages
+Gateway remains available during failures
 
 Partial failure example:
 
-This test simulates a downstream failure by scaling the inventory service to zero. The gateway remains available, while checkout fails quickly due to timeout handling.
+Inventory service unavailable while gateway is still running.
 
-![Partial Failure](docs/screenshots/12_partial_failure.png)
+Testing and Reliability
 
----
+Out of stock scenario:
 
-### Kubernetes Deployment
+System correctly handles unavailable stock.
 
-- Deployed using K3d (K3s)
-- Each service has its own Deployment and Service
-- ClusterIP used for internal communication
-- Ingress used for external access
+Bad rollout simulation:
 
----
+Invalid image causes deployment failure.
 
-## Tech Stack
+Pod level error diagnosis:
 
-- Node.js (Express)
-- Kubernetes (K3s / K3d)
-- KEDA (event-driven scaling)
-- Docker
+Shows ImagePullBackOff and root cause.
 
----
+Recovery after failure:
 
-## Project Structure
+System restored successfully after fixing image.
+
+Kubernetes Deployment
+Deployed using K3d (K3s)
+Each service has:
+Deployment
+Service
+Ingress used for external access
+ClusterIP used for internal communication
+Probes added for health checks
+Security
+PostgreSQL credentials stored using Kubernetes Secrets
+Application containers run as non root users
+Privilege escalation disabled
+Linux capabilities dropped
+Observability
+Each service provides a health endpoint
+Logs include:
+request method
+request path
+request ID
+Kubernetes tools used for debugging:
+kubectl logs
+kubectl describe
+events
+endpoints
+Persistence (PostgreSQL)
+PostgreSQL deployed on Kubernetes
+Uses Persistent Volume Claim for storage
+Credentials managed using Secret
+Data persists even after pod restart
+Tech Stack
+Node.js (Express)
+Kubernetes (K3s / K3d)
+KEDA
+PostgreSQL
+Docker
+Project Structure
 
 app/
-- gateway/
-- checkout/
-- pricing/
-- inventory/
+
+gateway/
+checkout/
+pricing/
+inventory/
 
 k8s/
-- Kubernetes manifests (deployments, services, ingress, scaling)
+
+deployments
+services
+ingress
+scaling
+postgres
 
 docs/
-- screenshots
 
----
-
-## What This Project Demonstrates
-
-- Designing and deploying microservices on Kubernetes
-- Implementing request tracing across services
-- Handling partial failures in distributed systems
-- Scaling applications dynamically using KEDA
-- Observing system behavior using logs
-
----
-
-## Future Improvements
-
-- Add PostgreSQL for persistent storage
-- Store checkout transactions or audit logs
-- Improve observability with metrics and dashboards
-
----
-
-## Author
+screenshots
+What This Project Demonstrates
+Microservices design on Kubernetes
+Service to service communication
+Request tracing using headers
+Handling failures in distributed systems
+Scaling applications using KEDA
+Debugging using Kubernetes tools
+Basic persistence using PostgreSQL
+Future Improvements
+Add metrics and monitoring (Prometheus, Grafana)
+Add centralized logging
+Improve database schema for real orders
+Add authentication and security layers
+Author
 
 Ajinkya Sawale

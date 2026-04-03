@@ -5,12 +5,15 @@ const app = express();
 
 const PORT = process.env.PORT || 5002;
 
+// stock data
 const stock = {
   "laptop-123": true,
   "mouse-456": true,
-  "keyboard-789": false
+  "keyboard-789": false,
+  "out-of-stock": false // added for testing
 };
 
+// request id middleware
 app.use((req, res, next) => {
   let requestId = req.headers['x-request-id'];
 
@@ -23,6 +26,7 @@ app.use((req, res, next) => {
   next();
 });
 
+// health endpoint
 app.get('/health', (req, res) => {
   res.json({
     service: 'inventory',
@@ -31,6 +35,7 @@ app.get('/health', (req, res) => {
   });
 });
 
+// stock endpoint
 app.get('/stock/:sku', (req, res) => {
   const sku = req.params.sku;
 
@@ -38,10 +43,12 @@ app.get('/stock/:sku', (req, res) => {
     `[Inventory] requestId=${req.requestId} method=GET path=/stock/${sku}`
   );
 
+  // if sku not found → treat as out-of-stock (not error)
   if (!(sku in stock)) {
-    return res.status(404).json({
+    return res.json({
       requestId: req.requestId,
-      error: 'SKU not found'
+      sku,
+      inStock: false
     });
   }
 
