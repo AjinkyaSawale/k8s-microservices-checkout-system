@@ -13,6 +13,11 @@ spec:
       labels:
         app: checkout
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
       containers:
         - name: checkout
           image: checkout:local
@@ -24,6 +29,12 @@ spec:
               value: "http://pricing:5001"
             - name: INVENTORY_URL
               value: "http://inventory:5002"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
           readinessProbe:
             httpGet:
               path: /health
@@ -36,3 +47,4 @@ spec:
               port: 4000
             initialDelaySeconds: 10
             periodSeconds: 10
+            
