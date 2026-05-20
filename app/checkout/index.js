@@ -6,9 +6,8 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 4000;
-
-const PRICING_URL = process.env.PRICING_URL || 'http://localhost:5001';
-const INVENTORY_URL = process.env.INVENTORY_URL || 'http://localhost:5002';
+const PRICING_URL = process.env.PRICING_URL || 'http://pricing:5001';
+const INVENTORY_URL = process.env.INVENTORY_URL || 'http://inventory:5002';
 
 app.use((req, res, next) => {
   let requestId = req.headers['x-request-id'];
@@ -19,7 +18,6 @@ app.use((req, res, next) => {
 
   req.requestId = requestId;
   res.setHeader('X-Request-Id', requestId);
-
   next();
 });
 
@@ -38,43 +36,59 @@ app.post('/checkout', async (req, res) => {
     `[Checkout] requestId=${req.requestId} method=POST path=/checkout sku=${sku} qty=${qty}`
   );
 
-  if (!sku || !qty || qty <= 0) {
+  if (!sku || typeof sku !== 'string' || !qty || qty <= 0) {
     return res.status(400).json({
       requestId: req.requestId,
       status: 'failed',
-      error: 'Invalid input: sku and qty (>0) are required'
+      error: 'Invalid input'
     });
   }
 
   try {
-    const pricingResponse = await axios.post(
+    const pricingPromise = axios.post(
       `${PRICING_URL}/price`,
       { sku, qty },
       {
+        timeout: 2000,
         headers: {
           'X-Request-Id': req.requestId
-        },
-        timeout: 1500
+        }
       }
     );
 
-    const inventoryResponse = await axios.get(
+    const inventoryPromise = axios.get(
       `${INVENTORY_URL}/stock/${sku}`,
       {
+        timeout: 2000,
         headers: {
           'X-Request-Id': req.requestId
-        },
-        timeout: 1500
+        }
       }
     );
 
+    const [pricingResponse, inventoryResponse] = await Promise.all([
+      pricingPromise,
+      inventoryPromise
+    ]);
+
     const unitPrice = pricingResponse.data.unitPrice;
-    const total = pricingResponse.data.total;
     const inStock = inventoryResponse.data.inStock;
 
-    if (!inStock) {
+    if (typeof unitPrice !== 'number') {
+      console.error(
+        `[Checkout] requestId=${req.requestId} result=invalid_pricing_response`
+      );
+
+      return res.status(503).json({
+        requestId: req.requestId,
+        status: 'failed',
+        error: 'Invalid pricing response'
+      });
+    }
+
+    if (inStock === false) {
       console.log(
-        `[Checkout] requestId=${req.requestId} result=out-of-stock`
+        `[Checkout] requestId=${req.requestId} result=out_of_stock`
       );
 
       return res.status(409).json({
@@ -87,11 +101,13 @@ app.post('/checkout', async (req, res) => {
       });
     }
 
+    const total = unitPrice * qty;
+
     console.log(
       `[Checkout] requestId=${req.requestId} result=success total=${total}`
     );
 
-    return res.json({
+    return res.status(200).json({
       requestId: req.requestId,
       sku,
       qty,
@@ -100,20 +116,15 @@ app.post('/checkout', async (req, res) => {
       inStock: true,
       status: 'confirmed'
     });
-
   } catch (error) {
-    const isTimeout = error.code === 'ECONNABORTED';
-
     console.error(
-      `[Checkout] requestId=${req.requestId} dependency_error=${error.message}`
+      `[Checkout] requestId=${req.requestId} result=dependency_failure error=${error.message}`
     );
 
     return res.status(503).json({
       requestId: req.requestId,
       status: 'failed',
-      error: isTimeout
-        ? 'Dependency timeout during checkout'
-        : 'Dependency unavailable during checkout'
+      error: 'Dependency unavailable during checkout'
     });
   }
 });
