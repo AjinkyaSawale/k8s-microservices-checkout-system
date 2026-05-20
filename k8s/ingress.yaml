@@ -3,7 +3,10 @@ kind: Ingress
 metadata:
   name: checkout-ingress
   namespace: checkout
+
 spec:
+  ingressClassName: traefik
+
   rules:
     - host: localhost
       http:
@@ -12,6 +15,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: gateway-proxy
+                name: gateway
                 port:
-                  number: 8080
+                  number: 3000

@@ -9,6 +9,23 @@ const PORT = process.env.PORT || 4000;
 const PRICING_URL = process.env.PRICING_URL || 'http://pricing:5001';
 const INVENTORY_URL = process.env.INVENTORY_URL || 'http://inventory:5002';
 
+function logEvent(level, event) {
+  const log = {
+    timestamp: new Date().toISOString(),
+    level,
+    service: 'checkout',
+    ...event
+  };
+
+  const output = JSON.stringify(log);
+
+  if (level === 'error') {
+    console.error(output);
+  } else {
+    console.log(output);
+  }
+}
+
 app.use((req, res, next) => {
   let requestId = req.headers['x-request-id'];
 
@@ -32,11 +49,25 @@ app.get('/health', (req, res) => {
 app.post('/checkout', async (req, res) => {
   const { sku, qty } = req.body;
 
-  console.log(
-    `[Checkout] requestId=${req.requestId} method=POST path=/checkout sku=${sku} qty=${qty}`
-  );
+  logEvent('info', {
+    requestId: req.requestId,
+    event: 'checkout_request_received',
+    method: 'POST',
+    path: '/checkout',
+    sku,
+    qty
+  });
 
   if (!sku || typeof sku !== 'string' || !qty || qty <= 0) {
+    logEvent('warn', {
+      requestId: req.requestId,
+      event: 'invalid_checkout_input',
+      method: 'POST',
+      path: '/checkout',
+      sku,
+      qty
+    });
+
     return res.status(400).json({
       requestId: req.requestId,
       status: 'failed',
@@ -45,6 +76,13 @@ app.post('/checkout', async (req, res) => {
   }
 
   try {
+    logEvent('info', {
+      requestId: req.requestId,
+      event: 'calling_dependencies',
+      pricingUrl: PRICING_URL,
+      inventoryUrl: INVENTORY_URL
+    });
+
     const pricingPromise = axios.post(
       `${PRICING_URL}/price`,
       { sku, qty },
@@ -75,9 +113,11 @@ app.post('/checkout', async (req, res) => {
     const inStock = inventoryResponse.data.inStock;
 
     if (typeof unitPrice !== 'number') {
-      console.error(
-        `[Checkout] requestId=${req.requestId} result=invalid_pricing_response`
-      );
+      logEvent('error', {
+        requestId: req.requestId,
+        event: 'invalid_pricing_response',
+        pricingResponse: pricingResponse.data
+      });
 
       return res.status(503).json({
         requestId: req.requestId,
@@ -87,9 +127,13 @@ app.post('/checkout', async (req, res) => {
     }
 
     if (inStock === false) {
-      console.log(
-        `[Checkout] requestId=${req.requestId} result=out_of_stock`
-      );
+      logEvent('warn', {
+        requestId: req.requestId,
+        event: 'out_of_stock',
+        sku,
+        qty,
+        inStock
+      });
 
       return res.status(409).json({
         requestId: req.requestId,
@@ -103,9 +147,16 @@ app.post('/checkout', async (req, res) => {
 
     const total = unitPrice * qty;
 
-    console.log(
-      `[Checkout] requestId=${req.requestId} result=success total=${total}`
-    );
+    logEvent('info', {
+      requestId: req.requestId,
+      event: 'checkout_success',
+      sku,
+      qty,
+      unitPrice,
+      total,
+      inStock: true,
+      status: 'confirmed'
+    });
 
     return res.status(200).json({
       requestId: req.requestId,
@@ -117,9 +168,13 @@ app.post('/checkout', async (req, res) => {
       status: 'confirmed'
     });
   } catch (error) {
-    console.error(
-      `[Checkout] requestId=${req.requestId} result=dependency_failure error=${error.message}`
-    );
+    logEvent('error', {
+      requestId: req.requestId,
+      event: 'dependency_failure',
+      error: error.message,
+      pricingUrl: PRICING_URL,
+      inventoryUrl: INVENTORY_URL
+    });
 
     return res.status(503).json({
       requestId: req.requestId,
@@ -130,5 +185,8 @@ app.post('/checkout', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Checkout service running on port ${PORT}`);
+  logEvent('info', {
+    event: 'service_started',
+    port: PORT
+  });
 });
